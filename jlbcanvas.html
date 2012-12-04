@@ -1,0 +1,354 @@
+<!doctype html>
+<html>
+    <head>
+        <script>
+        
+            function go(){
+            
+                // point
+                // circle
+                // disk
+                // rectangle
+                // box
+                // line
+                // clear
+                
+            
+                jc = new JLBCanvas("test_canvas");
+               
+                var angle = 0;
+                
+                jc.add_listener(
+                    "mousemove",
+                    function(coords){
+                        jc.box(coords, 100, 10, {angle: angle+=0.1, color: "random"});
+                    }
+                );
+            }
+            
+            function JLBCanvas(canvas_id, options){
+            
+                var options = {
+                    plane_type: "cartesian", // other options: "traditional", "first_quadrant"
+                };
+
+                var canvas      = document.getElementById(canvas_id);
+                var context     = canvas.getContext("2d");
+                var bound       = canvas.getBoundingClientRect();
+                var jlbcanvas   = this;
+
+                var properties = {};
+                properties.width = canvas.width;
+                properties.height = canvas.height;
+                if(options.plane_type == "traditional" || options.plane_type == "first_quadrant"){
+                    properties.x_min = 0;
+                    properties.x_max = properties.width-1;
+                    properties.y_min = 0;
+                    properties.y_max = properties.height-1;
+                }else{
+                    properties.x_min = -1 * properties.width/2 + 1;
+                    properties.x_max = properties.width/2;
+                    properties.y_min = -1 * properties.height/2 + 1;
+                    properties.y_max = properties.height/2;
+                }
+                
+                this.get_property = function(property){
+                    return properties[property];
+                }
+
+                
+                this.add_listener = function(listener_type, handler){
+                    canvas.addEventListener(listener_type, function(evt) {
+                        var coords = [evt.clientX - bound.left, evt.clientY - bound.top];
+                        coords = untranslate_coords(coords);
+                        var pixel = jlbcanvas.get_pixel(coords);
+                        handler(coords, pixel.color, pixel.opacity);
+                    }, false);
+                }
+
+                
+                this.point = function(coords, options){
+                    var options = typeof(options)=="undefined"?{}:options;
+                    var opacity = typeof(options.opacity)=="undefined"?1:options.opacity;
+                    var color   = translate_color(options.color, options.opacity);
+                    var coords  = translate_coords(coords);
+                    var imd     = context.getImageData(coords[0], coords[1], 1, 1);
+                    var old_pix = imd.data
+                    var new_pix = color.array;
+                    for(var i=0; i<4; i++){
+                        imd.data[i] = old_pix[i] * (1-opacity) + new_pix[i]*opacity;
+                    }
+                    context.putImageData(imd, coords[0], coords[1])
+                }
+
+
+                this.get_pixel = function(coords){
+                    var coords  = translate_coords(coords);
+                    var imd     = context.getImageData(coords[0], coords[1], 1, 1);
+                    var raw     = imd.data;
+                    var pixel   = {
+                        color: [raw[0], raw[1], raw[2]],
+                        opacity: raw[3]/255
+                    };
+                    return pixel;
+                }
+
+
+                this.clear = function(options){
+                    if(typeof(options)=="undefined"){options = {color: [0, 0, 0], opacity: 0};}
+                    var color = translate_color(options.color, options.opacity);
+                    context.clearRect(0, 0, properties.width, properties.height);
+                    context.beginPath();
+                    context.rect(0, 0, properties.width, properties.height);
+                    context.fillStyle = color.string;
+                    context.fill();
+                }
+
+
+                this.line = function(point1, point2, options){
+                    var options     = typeof(options)=="undefined"?{}:options;
+                    var thickness   = typeof(options.thickness)=="undefined"?1:options.thickness;
+                    var color       = translate_color(options.color, options.opacity);
+                    var point1      = translate_coords(point1);
+                    var point2      = translate_coords(point2);
+                    
+                    context.lineWidth = thickness;
+                    context.strokeStyle = color.string;
+                    context.beginPath();
+                    context.moveTo(point1[0], point1[1]);
+                    context.lineTo(point2[0], point2[1]);
+                    context.closePath();
+                    context.stroke();
+                }
+
+
+                this.circle = function(coords, radius, options){
+                    var options     = typeof(options)=="undefined"?{}:options;
+                    var coords      = translate_coords(coords);
+                    var color       = translate_color(options.color, options.opacity);
+                    var thickness   = typeof(options.thickness)=="undefined"?1:options.thickness;
+                    
+                    context.beginPath();
+                    context.arc(coords[0], coords[1], radius, 0, 2 * Math.PI, false);
+                    context.lineWidth = thickness;
+                    context.strokeStyle = color.string;
+                    context.stroke(); 
+                }
+
+
+                this.disk = function(coords, radius, options){
+                    var options = typeof(options)=="undefined"?{}:options;
+                    var coords  = translate_coords(coords);
+                    var color   = translate_color(options.color, options.opacity);
+                    
+                    context.beginPath();
+                    context.arc(coords[0], coords[1], radius, 0, 2 * Math.PI, false);
+                    context.fillStyle = color.string;
+                    context.fill();
+                }
+
+
+                this.box = function(center, width, height, options){
+                    var options = typeof(options)=="undefined"?{}:options;
+                    var color   = translate_color(options.color, options.opacity);
+                    var angle   = typeof(options.angle)=="undefined"?0:options.angle;
+                    
+                    start_quadrilateral(center, width, height, angle);
+                    context.fillStyle = color.string;
+                    context.fill();
+                }
+
+
+                this.rectangle = function(center, width, height, options){
+                    var options = typeof(options)=="undefined"?{}:options;
+                    var color   = translate_color(options.color, options.opacity);
+                    var angle   = typeof(options.angle)=="undefined"?0:options.angle;
+                    var thickness = typeof(options.thickness)=="undefined"?1:options.thickness;
+                    
+                    start_quadrilateral(center, width, height, angle);
+                    context.lineWidth = thickness;
+                    context.strokeStyle = color.string;
+                    context.stroke();
+                }
+
+
+                var start_quadrilateral = function(center, width, height, angle){
+                    var center  = translate_coords(center);
+                    var tl      = [center[0] - width/2, center[1] - height/2];
+                    var tr      = [center[0] + width/2, center[1] - height/2];
+                    var br      = [center[0] + width/2, center[1] + height/2];
+                    var bl      = [center[0] - width/2, center[1] + height/2];
+                    var points  = [
+                        rotate_point(tl, angle, center),
+                        rotate_point(tr, angle, center),
+                        rotate_point(br, angle, center),
+                        rotate_point(bl, angle, center),
+                    ];
+                    context.beginPath();
+                    context.moveTo(points[0][0], points[0][1]);
+                    for(var i = 1; i<points.length; i++){
+                        context.lineTo(points[i][0], points[i][1]);
+                    }
+                    context.closePath();
+                }
+
+
+                var rotate_point = function(point, angle, pivot){
+
+                    if(typeof(pivot)=="undefined"){pivot = [0, 0];}
+                    if(typeof(angle)=="string"){angle = angle*Math.PI/180;}
+                
+                    var s = Math.sin(angle);   
+                    var c = Math.cos(angle);
+                    
+                    // get point relative to pivot
+                    var rel_x = point[0] - pivot[0];
+                    var rel_y = point[1] - pivot[1];
+
+                    // rotate point   
+                    var rot_x = rel_x * c - rel_y * s;   
+                    var rot_y = rel_x * s + rel_y * c; 
+
+                    // translate point back to global coords:
+                    var final_x = rot_x + pivot[0];  
+                    var final_y = rot_y + pivot[1]; 
+                
+                    return [final_x, final_y];
+                }
+                
+                this.plot = function(f){
+                    for(x = properties.x_min; x <= properties.x_max; x++){
+                    
+                    }
+                
+                
+                }
+
+
+                var translate_color = function(color, opacity){
+
+                    // if it came in undefined...
+                    if(typeof(opacity) === "undefined"){opacity = 1;}
+                    if(typeof(color) === "undefined"){color = [0, 0, 0];}
+                
+                    // if it came in as a string...
+                    if(typeof(color) == "string"){
+                    
+                        // if it seems to be a normal name
+                        if(color=="random"){
+                            color = "#";
+                            for(var i=0; i<6; i++){
+                                color = color+"0123456789ABCDEF".charAt(Math.random() * 16);
+                            }
+                            console.log(color);
+                        }
+                        else if(color.charAt(0) != "#"){
+                            if (typeof color_hex_vals[color.toLowerCase()] != 'undefined'){
+                                color = color_hex_vals[color.toLowerCase()];
+                            }else{color = "#000000";}
+                        }
+                        
+                        // string off the "#"
+                        color = color.substr(1);
+                        var color = [
+                            parseInt(color.substr(0,2), 16),
+                            parseInt(color.substr(2,2), 16),
+                            parseInt(color.substr(4,2), 16)
+                        ];
+                    }
+                    
+                    // if it still has any channel missing (particuarly [3], the alpha)
+                    if(typeof(color[0]) === "undefined"){color[0] = 0;}
+                    if(typeof(color[1]) === "undefined"){color[1] = 0;}
+                    if(typeof(color[2]) === "undefined"){color[2] = 0;}
+                    if(typeof(color[3]) === "undefined"){color[3] = Math.floor(opacity*255);}
+                    
+                    var rgba_opacity = 
+                    color = {
+                        array: color,
+                        string: "rgba("+Math.floor(color[0])+", "+Math.floor(color[1])+", "+Math.floor(color[2])+", "+opacity+")"
+                    }
+
+                    return color;
+                }
+
+
+                var translate_coords = function(input_coords){
+                    switch(options.plane_type){
+                        case "traditional":
+                            var translated_coords = input_coords;
+                            break;
+                        case "first_quadrant":
+                            var translated_coords = [
+                                input_coords[0],
+                                -1 * input_coords[1] - properties.height
+                            ];
+                            break;
+                        default:
+                            var translated_coords = [
+                                input_coords[0]+properties.width/2,
+                                -1 * input_coords[1] + properties.height/2
+                            ];
+                    }
+                    return translated_coords;
+                }
+
+
+                var untranslate_coords = function(coords){
+                    switch(options.plane_type){
+                        case "traditional":
+                            var raw_coords = coords;
+                            break;
+                        case "first_quadrant":
+                            var raw_coords = [
+                                coords[0],
+                                -1 * coords[1] + properties.height
+                            ];
+                            break;
+                        default:
+                            var raw_coords = [
+                                coords[0]-properties.width/2,
+                                -1 * coords[1] + properties.height/2
+                            ];
+                    }
+                    return raw_coords;
+                }
+
+                var color_hex_vals = {"aliceblue":"#f0f8ff","antiquewhite":"#faebd7","aqua":"#00ffff","aquamarine":"#7fffd4","azure":"#f0ffff",
+                    "beige":"#f5f5dc","bisque":"#ffe4c4","black":"#000000","blanchedalmond":"#ffebcd","blue":"#0000ff","blueviolet":"#8a2be2","brown":"#a52a2a","burlywood":"#deb887",
+                    "cadetblue":"#5f9ea0","chartreuse":"#7fff00","chocolate":"#d2691e","coral":"#ff7f50","cornflowerblue":"#6495ed","cornsilk":"#fff8dc","crimson":"#dc143c","cyan":"#00ffff",
+                    "darkblue":"#00008b","darkcyan":"#008b8b","darkgoldenrod":"#b8860b","darkgray":"#a9a9a9","darkgreen":"#006400","darkkhaki":"#bdb76b","darkmagenta":"#8b008b","darkolivegreen":"#556b2f",
+                    "darkorange":"#ff8c00","darkorchid":"#9932cc","darkred":"#8b0000","darksalmon":"#e9967a","darkseagreen":"#8fbc8f","darkslateblue":"#483d8b","darkslategray":"#2f4f4f","darkturquoise":"#00ced1",
+                    "darkviolet":"#9400d3","deeppink":"#ff1493","deepskyblue":"#00bfff","dimgray":"#696969","dodgerblue":"#1e90ff",
+                    "firebrick":"#b22222","floralwhite":"#fffaf0","forestgreen":"#228b22","fuchsia":"#ff00ff",
+                    "gainsboro":"#dcdcdc","ghostwhite":"#f8f8ff","gold":"#ffd700","goldenrod":"#daa520","gray":"#808080","green":"#008000","greenyellow":"#adff2f",
+                    "honeydew":"#f0fff0","hotpink":"#ff69b4",
+                    "indianred ":"#cd5c5c","indigo ":"#4b0082","ivory":"#fffff0","khaki":"#f0e68c",
+                    "lavender":"#e6e6fa","lavenderblush":"#fff0f5","lawngreen":"#7cfc00","lemonchiffon":"#fffacd","lightblue":"#add8e6","lightcoral":"#f08080","lightcyan":"#e0ffff","lightgoldenrodyellow":"#fafad2",
+                    "lightgrey":"#d3d3d3","lightgreen":"#90ee90","lightpink":"#ffb6c1","lightsalmon":"#ffa07a","lightseagreen":"#20b2aa","lightskyblue":"#87cefa","lightslategray":"#778899","lightsteelblue":"#b0c4de",
+                    "lightyellow":"#ffffe0","lime":"#00ff00","limegreen":"#32cd32","linen":"#faf0e6",
+                    "magenta":"#ff00ff","maroon":"#800000","mediumaquamarine":"#66cdaa","mediumblue":"#0000cd","mediumorchid":"#ba55d3","mediumpurple":"#9370d8","mediumseagreen":"#3cb371","mediumslateblue":"#7b68ee",
+                    "mediumspringgreen":"#00fa9a","mediumturquoise":"#48d1cc","mediumvioletred":"#c71585","midnightblue":"#191970","mintcream":"#f5fffa","mistyrose":"#ffe4e1","moccasin":"#ffe4b5",
+                    "navajowhite":"#ffdead","navy":"#000080",
+                    "oldlace":"#fdf5e6","olive":"#808000","olivedrab":"#6b8e23","orange":"#ffa500","orangered":"#ff4500","orchid":"#da70d6",
+                    "palegoldenrod":"#eee8aa","palegreen":"#98fb98","paleturquoise":"#afeeee","palevioletred":"#d87093","papayawhip":"#ffefd5","peachpuff":"#ffdab9","peru":"#cd853f","pink":"#ffc0cb","plum":"#dda0dd","powderblue":"#b0e0e6","purple":"#800080",
+                    "red":"#ff0000","rosybrown":"#bc8f8f","royalblue":"#4169e1",
+                    "saddlebrown":"#8b4513","salmon":"#fa8072","sandybrown":"#f4a460","seagreen":"#2e8b57","seashell":"#fff5ee","sienna":"#a0522d","silver":"#c0c0c0","skyblue":"#87ceeb","slateblue":"#6a5acd","slategray":"#708090","snow":"#fffafa","springgreen":"#00ff7f","steelblue":"#4682b4",
+                    "tan":"#d2b48c","teal":"#008080","thistle":"#d8bfd8","tomato":"#ff6347","turquoise":"#40e0d0",
+                    "violet":"#ee82ee", "wheat":"#f5deb3","white":"#ffffff","whitesmoke":"#f5f5f5", "yellow":"#ffff00","yellowgreen":"#9acd32"};
+
+                canvas.style.border = "2px solid red";
+            }
+        
+        </script>
+    
+    
+    
+    
+    </head>
+    <body onload="go()">
+        <canvas id="test_canvas" width="600", height="500">
+            Random Canvas
+        </canvas>
+    </body>
+</html>
