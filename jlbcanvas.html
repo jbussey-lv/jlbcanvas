@@ -5,25 +5,26 @@
         
             function go(){
             
-                // point
-                // circle
-                // disk
-                // rectangle
-                // box
-                // line
-                // clear
-                
-            
                 jc = new JLBCanvas("test_canvas");
                
-                var angle = 0;
+                corners = [];
                 
                 jc.add_listener(
-                    "mousemove",
+                    "click",
                     function(coords){
-                        jc.box(coords, 100, 10, {angle: angle+=0.1, color: "random"});
+                        jc.disk(coords,2);
+                        corners.push(coords);
                     }
                 );
+            }
+      
+            
+            function sierpinski(){
+                if(typeof(point)=="undefined"){point = jc.get_random_point();}
+                jc.point(point);
+                corner = corners[Math.floor(Math.random()*corners.length)];
+                point = jc.get_midpoint(point, corner);
+                setTimeout(sierpinski, 1);
             }
             
             function JLBCanvas(canvas_id, options){
@@ -93,6 +94,11 @@
                     return pixel;
                 }
 
+                this.get_midpoint = function(p1, p2){
+                    var x = (p1[0] + p2[0])/2;
+                    var y = (p1[1] + p2[1])/2;
+                    return [x, y];
+                }
 
                 this.clear = function(options){
                     if(typeof(options)=="undefined"){options = {color: [0, 0, 0], opacity: 0};}
@@ -123,10 +129,10 @@
 
 
                 this.circle = function(coords, radius, options){
-                    var options     = typeof(options)=="undefined"?{}:options;
                     var coords      = translate_coords(coords);
+                    var options     = translate_options(options);
                     var color       = translate_color(options.color, options.opacity);
-                    var thickness   = typeof(options.thickness)=="undefined"?1:options.thickness;
+                    var thickness   = translate_thickness(options.thickness);
                     
                     context.beginPath();
                     context.arc(coords[0], coords[1], radius, 0, 2 * Math.PI, false);
@@ -137,8 +143,8 @@
 
 
                 this.disk = function(coords, radius, options){
-                    var options = typeof(options)=="undefined"?{}:options;
                     var coords  = translate_coords(coords);
+                    var options = translate_options(options);
                     var color   = translate_color(options.color, options.opacity);
                     
                     context.beginPath();
@@ -148,41 +154,42 @@
                 }
 
 
-                this.box = function(center, width, height, options){
-                    var options = typeof(options)=="undefined"?{}:options;
+                this.box = function(coords, width, height, options){
+                    var coords  = translate_coords(coords);
+                    var options = translate_options(options);
                     var color   = translate_color(options.color, options.opacity);
-                    var angle   = typeof(options.angle)=="undefined"?0:options.angle;
+                    var angle   = translate_angle(options.angle);
                     
-                    start_quadrilateral(center, width, height, angle);
+                    start_quadrilateral(coords, width, height, angle);
                     context.fillStyle = color.string;
                     context.fill();
                 }
 
 
-                this.rectangle = function(center, width, height, options){
-                    var options = typeof(options)=="undefined"?{}:options;
-                    var color   = translate_color(options.color, options.opacity);
-                    var angle   = typeof(options.angle)=="undefined"?0:options.angle;
-                    var thickness = typeof(options.thickness)=="undefined"?1:options.thickness;
+                this.rectangle = function(coords, width, height, options){
+                    var coords      = translate_coords(coords);
+                    var options     = translate_options(options);
+                    var color       = translate_color(options.color, options.opacity);
+                    var angle       = translate_angle(options.angle);
+                    var thickness   = translate_thickness(options.thickness);
                     
-                    start_quadrilateral(center, width, height, angle);
+                    start_quadrilateral(coords, width, height, angle);
                     context.lineWidth = thickness;
                     context.strokeStyle = color.string;
                     context.stroke();
                 }
 
 
-                var start_quadrilateral = function(center, width, height, angle){
-                    var center  = translate_coords(center);
-                    var tl      = [center[0] - width/2, center[1] - height/2];
-                    var tr      = [center[0] + width/2, center[1] - height/2];
-                    var br      = [center[0] + width/2, center[1] + height/2];
-                    var bl      = [center[0] - width/2, center[1] + height/2];
+                var start_quadrilateral = function(coords, width, height, angle){
+                    var tl      = [coords[0] - width/2, coords[1] - height/2];
+                    var tr      = [coords[0] + width/2, coords[1] - height/2];
+                    var br      = [coords[0] + width/2, coords[1] + height/2];
+                    var bl      = [coords[0] - width/2, coords[1] + height/2];
                     var points  = [
-                        rotate_point(tl, angle, center),
-                        rotate_point(tr, angle, center),
-                        rotate_point(br, angle, center),
-                        rotate_point(bl, angle, center),
+                        rotate_point(tl, angle, coords),
+                        rotate_point(tr, angle, coords),
+                        rotate_point(br, angle, coords),
+                        rotate_point(bl, angle, coords),
                     ];
                     context.beginPath();
                     context.moveTo(points[0][0], points[0][1]);
@@ -191,13 +198,24 @@
                     }
                     context.closePath();
                 }
-
+                
+                var translate_options = function(options){
+                    if(typeof(options)==="undefined"){return {};}
+                    return options;
+                }
+                
+                var translate_angle = function(angle){
+                    if(typeof(angle)==="undefined"){return 0;}
+                    if(typeof(angle)=="string"){
+                        if(angle == "random"){return Math.random()*2*Math.PI;}
+                        else{return angle*Math.PI/180;}
+                    }
+                    return angle;
+                }
 
                 var rotate_point = function(point, angle, pivot){
-
-                    if(typeof(pivot)=="undefined"){pivot = [0, 0];}
-                    if(typeof(angle)=="string"){angle = angle*Math.PI/180;}
                 
+                    // cache trig calculations
                     var s = Math.sin(angle);   
                     var c = Math.cos(angle);
                     
@@ -223,6 +241,17 @@
                 
                 
                 }
+                
+                this.get_random_point = function(){
+                    var x = Math.random() * (properties.x_max - properties.x_min) + properties.x_min;
+                    var y = Math.random() * (properties.y_max - properties.y_min) + properties.y_min;
+                    return [x, y];
+                }
+                
+                var translate_thickness = function(thickness){
+                    if(typeof(options.thickness)==="undefined"){return 1;}
+                    return thickness;
+                }
 
 
                 var translate_color = function(color, opacity){
@@ -240,7 +269,6 @@
                             for(var i=0; i<6; i++){
                                 color = color+"0123456789ABCDEF".charAt(Math.random() * 16);
                             }
-                            console.log(color);
                         }
                         else if(color.charAt(0) != "#"){
                             if (typeof color_hex_vals[color.toLowerCase()] != 'undefined'){
@@ -274,6 +302,11 @@
 
 
                 var translate_coords = function(input_coords){
+                
+                    // handle weird cases
+                    if(input_coords === "random"){input_coords = this.get_random_point();}
+                    
+                    // translate based on plane type
                     switch(options.plane_type){
                         case "traditional":
                             var translated_coords = input_coords;
@@ -347,8 +380,7 @@
     
     </head>
     <body onload="go()">
-        <canvas id="test_canvas" width="600", height="500">
-            Random Canvas
-        </canvas>
+        <a href="javascript: sierpinski()">run</a><br>
+        <canvas id="test_canvas" width="600", height="500"></canvas>
     </body>
 </html>
